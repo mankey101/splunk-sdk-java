@@ -76,6 +76,15 @@ public class Service extends BaseService {
     /** The default scheme, which is used when a scheme is not provided. */
     public static String DEFAULT_SCHEME = "https";
 
+    /** Keystore passphrase */
+    protected  String keyStorePassPhrase = null;
+
+    /** Keystore type */
+    protected String keyStoreType = "PKCS12";
+
+    /** KeyStore file path */
+    protected String keyStorePath = null;
+
     /**
      * Creates a new {@code Service} instance using a host.
      *
@@ -151,6 +160,11 @@ public class Service extends BaseService {
         this.httpsHandler = Args.<URLStreamHandler>get(args, "httpsHandler", null);
         this.setSslSecurityProtocol(Args.get(args, "SSLSecurityProtocol", Service.getSslSecurityProtocol()));
         this.addCookie((String)args.get("cookie"));
+
+        //MTLS support
+        this.keyStorePassPhrase = (String) args.get("keyStorePassPhrase");
+        this.keyStorePath = (String) args.get("keyStorePath");
+        this.keyStoreType = (String) args.get("keyStoreType");
     }
 
     /**
@@ -173,6 +187,11 @@ public class Service extends BaseService {
         this.addCookie((String)args.get("cookie"));
         this.connectTimeout = Args.<Integer>get(args, "connectTimeout", null);
         this.readTimeout = Args.<Integer>get(args, "readTimeout", null);
+        //mtls
+        this.keyStorePassPhrase = (String) args.get("keyStorePassPhrase");
+        this.keyStorePath = (String) args.get("keyStorePath");
+        this.keyStoreType = Args.get(args,"keyStoreType",keyStoreType);
+
     }
 
     /**
@@ -1100,7 +1119,7 @@ public class Service extends BaseService {
             throw new IllegalStateException("Missing username or password.");
         }
         else {
-            return login(this.username, this.password);
+            return login(this.username, this.password, this.keyStorePassPhrase, this.keyStorePath, this.keyStoreType);
         }
     }
 
@@ -1114,18 +1133,30 @@ public class Service extends BaseService {
      * @return The current {@code Service} instance.
      */
     public Service login(String username, String password) {
+        return login(this.username, this.password, this.keyStorePassPhrase, this.keyStorePath, keyStoreType);
+    }
+
+    public Service login(String username, String password, String keyStorePassPhrase, String keyStorePath, String keyStoreType ){
         this.username = username;
         this.password = password;
+        this.keyStorePassPhrase = keyStorePassPhrase;
+        this.keyStorePath = keyStorePath;
+        this.keyStoreType = keyStoreType;
 
         Args args = new Args();
         args.put("username", username);
         args.put("password", password);
         args.put("cookie", "1");
-        ResponseMessage response = post("/services/auth/login", args);
+        //mtls
+        Args mtlsArgs = new Args();
+        mtlsArgs.put("keyStorePassPhrase", keyStorePassPhrase);
+        mtlsArgs.put("keyStorePath", keyStorePath);
+        mtlsArgs.put("keyStoreType", keyStoreType);
+        ResponseMessage response = post("/services/auth/login", args, mtlsArgs);
         String sessionKey = Xml.parse(response.getContent())
-            .getElementsByTagName("sessionKey")
-            .item(0)
-            .getTextContent();
+                .getElementsByTagName("sessionKey")
+                .item(0)
+                .getTextContent();
         this.token = "Splunk " + sessionKey;
         this.version = this.getInfo().getVersion();
         if (versionCompare("4.3") >= 0)

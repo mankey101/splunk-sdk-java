@@ -164,4 +164,21 @@ public class ServiceArgs extends Args {
     public void setCookie(String cookie) {
         this.put("cookie", cookie);
     }
+
+    /**
+     *
+     * @param keyStorePassPhrase passphrase to unlock the keystore
+     */
+    public void setKeyStorePassPhrase(String keyStorePassPhrase){ this.put("keyStorePassPhrase", keyStorePassPhrase); }
+
+    /**
+     *
+     * @param keyStorePath path of the keystore
+     */
+    public void setKeyStorePath(String keyStorePath) { this.put("keyStorePath", keyStorePath);}
+
+    /**
+     * @param keyStoreType type of keystore : (Default is PKCS12)
+     */
+    public void setKeyStoreType(String keyStoreType) { this.put("keyStoreType", keyStoreType);}
 }

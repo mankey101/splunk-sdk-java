@@ -17,11 +17,10 @@
 package com.splunk;
 
 import javax.net.ssl.*;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.OutputStreamWriter;
+import java.io.*;
 import java.net.*;
+import java.security.Key;
+import java.security.KeyStore;
 import java.security.cert.X509Certificate;
 import java.util.HashMap;
 import java.util.List;
@@ -36,8 +35,8 @@ import java.util.Map.Entry;
 public class HttpService {
     // For debugging purposes
     private static final boolean VERBOSE_REQUESTS = false;
-    protected static SSLSecurityProtocol sslSecurityProtocol = SSLSecurityProtocol.SSLv3;
-    private static SSLSocketFactory sslSocketFactory = createSSLFactory();
+    protected static SSLSecurityProtocol sslSecurityProtocol = SSLSecurityProtocol.TLSv1_2;
+    private static SSLSocketFactory sslSocketFactory = null;
     private static String HTTPS_SCHEME = "https";
     private static String HTTP_SCHEME = "http";
 
@@ -331,6 +330,7 @@ public class HttpService {
         return post(path, null);
     }
 
+
     /**
      * Issues a POST request against the service using a given path and
      * form arguments.
@@ -339,13 +339,18 @@ public class HttpService {
      * @param args The form arguments.
      * @return The HTTP response.
      */
-    public ResponseMessage post(String path, Map<String, Object> args) {
+    public ResponseMessage post(String path, Map<String, Object> args){
+        return post(path, null, null);
+    }
+
+    public ResponseMessage post(String path, Map<String, Object> args, Map<String, Object> mtlsParams) {
         RequestMessage request = new RequestMessage("POST");
         request.getHeader().put(
                 "Content-Type", "application/x-www-form-urlencoded");
         if (count(args) > 0)
             request.setContent(Args.encode(args));
-        return send(path, request);
+        if(mtlsParams.get("keyStorePassPhrase") == null) mtlsParams = null;
+        return send(path, request, mtlsParams);
     }
 
     /**
@@ -387,6 +392,7 @@ public class HttpService {
         return new Socket(this.host, this.port);
     }
 
+
     /**
      * Issue an HTTP request against the service using a given path and
      * request message.
@@ -395,10 +401,13 @@ public class HttpService {
      * @param request The request message.
      * @return The HTTP response.
      */
-    public ResponseMessage send(String path, RequestMessage request) {
+    public ResponseMessage send(String path, RequestMessage request){
+        return send(path, request, null);
+    }
+
+    public ResponseMessage send(String path, RequestMessage request, Map<String, Object> mtlsParams) {
         // Construct a full URL to the resource
         URL url = getUrl(path);
-
         // Create and initialize the connection object
         HttpURLConnection cn;
         try {
@@ -407,7 +416,7 @@ public class HttpService {
             throw new RuntimeException(e.getMessage(), e);
         }
         if (cn instanceof HttpsURLConnection) {
-            ((HttpsURLConnection) cn).setSSLSocketFactory(sslSocketFactory);
+            ((HttpsURLConnection) cn).setSSLSocketFactory(createSSLFactory(mtlsParams));
             ((HttpsURLConnection) cn).setHostnameVerifier(HOSTNAME_VERIFIER);
         }
         cn.setUseCaches(false);
@@ -512,7 +521,12 @@ public class HttpService {
         return HttpService.sslSocketFactory;
     }
 
-    public static SSLSocketFactory createSSLFactory() {
+    public static SSLSocketFactory createSSLFactory(){
+        return createSSLFactory(null);
+    }
+
+    public static SSLSocketFactory createSSLFactory(Map<String, Object> mtlsParams) {
+        if(sslSocketFactory != null) return sslSocketFactory;
         TrustManager[] trustAll = new TrustManager[]{
                 new X509TrustManager() {
                     public X509Certificate[] getAcceptedIssuers() {
@@ -527,7 +541,16 @@ public class HttpService {
                 }
         };
         try {
+            KeyManagerFactory keyManagerFactory = null;
+            if(mtlsParams != null) {
+                String keyPassphrase = (String) mtlsParams.get("keyStorePassPhrase");
+                KeyStore keyStore = KeyStore.getInstance((String) mtlsParams.get("keyStoreType"));
+                keyStore.load(new FileInputStream((String) mtlsParams.get("keyStorePath")), keyPassphrase.toCharArray());
+                keyManagerFactory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+                keyManagerFactory.init(keyStore, keyPassphrase.toCharArray());
+            }
             SSLContext context;
+
             switch (HttpService.sslSecurityProtocol) {
                 case TLSv1_2:
                 case TLSv1_1:
@@ -538,7 +561,8 @@ public class HttpService {
                     context = SSLContext.getInstance("SSL");
             }
 
-            context.init(null, trustAll, new java.security.SecureRandom());
+            if(keyManagerFactory != null) context.init(keyManagerFactory.getKeyManagers(), trustAll, new java.security.SecureRandom());
+            else context.init(null, trustAll, new java.security.SecureRandom());
             return new SplunkHttpsSocketFactory(context.getSocketFactory(), HttpService.sslSecurityProtocol);
         } catch (Exception e) {
             throw new RuntimeException("Error setting up SSL socket factory: " + e, e);
