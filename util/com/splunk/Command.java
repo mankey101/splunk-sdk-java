@@ -95,6 +95,9 @@ public class Command {
         rules.addOption(null, "owner", true, "Owner/user context");
         // This is here only for compatibility with the JavaScript SDK's .splunkrc.
         rules.addOption(null, "version", true, "Version (irrelevant for Java)");
+        rules.addOption(null, "keyStorePassPhrase", true, "KeyStore passphrase");
+        rules.addOption(null, "keyStorePath", true, "Path for the keystore jks file");
+        rules.addOption(null, "keyStoreType", true, "Type of keystore format");
         return this;
     }
 

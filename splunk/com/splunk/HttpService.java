@@ -416,7 +416,8 @@ public class HttpService {
             throw new RuntimeException(e.getMessage(), e);
         }
         if (cn instanceof HttpsURLConnection) {
-            ((HttpsURLConnection) cn).setSSLSocketFactory(createSSLFactory(mtlsParams));
+            if(sslSocketFactory == null) sslSocketFactory = createSSLFactory(mtlsParams);
+            ((HttpsURLConnection) cn).setSSLSocketFactory(sslSocketFactory);
             ((HttpsURLConnection) cn).setHostnameVerifier(HOSTNAME_VERIFIER);
         }
         cn.setUseCaches(false);
@@ -526,7 +527,6 @@ public class HttpService {
     }
 
     public static SSLSocketFactory createSSLFactory(Map<String, Object> mtlsParams) {
-        if(sslSocketFactory != null) return sslSocketFactory;
         TrustManager[] trustAll = new TrustManager[]{
                 new X509TrustManager() {
                     public X509Certificate[] getAcceptedIssuers() {
